@@ -2,14 +2,15 @@
   "name": "jrmph-boost",
   "version": "1.0.0",
   "main": "server.js",
-  "scripts": { "start": "node server.js" },
+  "scripts": {
+    "start": "node server.js"
+  },
   "dependencies": {
     "express": "^4.18.2",
     "express-session": "^1.17.3",
     "session-file-store": "^1.5.0",
     "axios": "^1.6.0",
     "user-agents": "^1.0.1400",
-    "@supabase/supabase-js": "^2.39.7",
-    "dotenv": "^16.3.1"
+    "@supabase/supabase-js": "^2.39.7"
   }
 }
