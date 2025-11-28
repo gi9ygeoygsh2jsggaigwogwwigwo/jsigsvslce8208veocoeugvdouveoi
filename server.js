@@ -1,10 +1,19 @@
+require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
 const FileStore = require('session-file-store')(session);
 const { createClient } = require('@supabase/supabase-js');
 const axios = require('axios');
 const UserAgents = require('user-agents');
+const cors = require('cors'); // ← ITO ANG KULANG MO!
+
 const app = express();
+
+// FIX #1: CORS — PARA MAKACONNECT ANG VERCEL
+app.use(cors({
+    origin: "*", // or specific domain mo
+    credentials: true
+}));
 
 app.use(express.json());
 app.use(session({
@@ -12,10 +21,10 @@ app.use(session({
     secret: 'jrmph2025-secret',
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 30*24*60*60*1000 }
+    cookie: { maxAge: 30*24*60*60*1000, httpOnly: true, sameSite: 'lax' }
 }));
 
-// SUPABASE — HARD CODED (SAFE KASI RENDER ONLY)
+// SUPABASE (YOUR PROJECT)
 const supabase = createClient(
     'https://eicbwqhajvkrnotiemjj.supabase.co',
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpY2J3cWhhanZrcm5vdGllbWpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQzMzc3NTAsImV4cCI6MjA3OTkxMzc1MH0.no58Sn8uFzgCJRYLRRBzxq6g3UGl6JWxjX1iEUcBje4'
@@ -24,33 +33,47 @@ const supabase = createClient(
 const ADMIN_PASS = "Jrmphella060725";
 const ACTIVE_USERS = new Map();
 
-// BOOST FUNCTION (YOUR ORIGINAL — WORKING)
+// FIXED BOOST FUNCTION — NO MORE TEMPLATE BUG!
 async function tiktokBoost(url) {
-    const ip = Array(4).fill(0).map(()=>Math.floor(Math.random()*255)).join('.');
+    const ip = Array(4).fill(0).map(() => Math.floor(Math.random() * 255)).join('.');
     const ua = new UserAgents({ deviceCategory: "mobile" }).random().toString();
     try {
-        const bypass = `\( {url}?ref=jrmph \){Date.now()}`;
-        await axios.get("https://boostgrams.com", { headers: { "User-Agent": ua, "X-Forwarded-For": ip }, timeout: 15000 }).catch(()=>{});
-        await axios.get("https://boostgrams.com/free-tiktok-views/", { headers: { "User-Agent": ua, "X-Forwarded-For": ip }, timeout: 15000 }).catch(()=>{});
+        const bypass = url + '?ref=jrmph' + Date.now(); // ← FIXED NA!
+        await axios.get("https://boostgrams.com", { headers: { "User-Agent": ua, "X-Forwarded-For": ip }, timeout: 15000 }).catch(() => {});
+        await axios.get("https://boostgrams.com/free-tiktok-views/", { headers: { "User-Agent": ua, "X-Forwarded-For": ip }, timeout: 15000 }).catch(() => {});
 
         const step1 = await axios.post("https://boostgrams.com/action/", new URLSearchParams({
-            ns_action: "freetool_start", "freetool[id]": "22",
-            "freetool[process_item]": bypass, "freetool[quantity]": "100"
-        }), { headers: { "User-Agent": ua, "X-Forwarded-For": ip }, timeout: 20000 });
+            ns_action: "freetool_start",
+            "freetool[id]": "22",
+            "freetool[process_item]": bypass,
+            "freetool[quantity]": "100"
+        }), {
+            headers: { "User-Agent": ua, "X-Forwarded-For": ip },
+            timeout: 20000
+        });
 
         const token = step1.data?.freetool_process_token;
         if (!token) return false;
 
         await axios.post("https://boostgrams.com/action/", new URLSearchParams({
-            ns_action: "freetool_start", "freetool[id]": "22",
-            "freetool[token]": token, "freetool[process_item]": bypass, "freetool[quantity]": "100"
-        }), { headers: { "User-Agent": ua, "X-Forwarded-For": ip }, timeout: 20000 });
+            ns_action: "freetool_start",
+            "freetool[id]": "22",
+            "freetool[token]": token,
+            "freetool[process_item]": bypass,
+            "freetool[quantity]": "100"
+        }), {
+            headers: { "User-Agent": ua, "X-Forwarded-For": ip },
+            timeout: 20000
+        });
 
         return true;
-    } catch { return false; }
+    } catch (e) {
+        console.log("Boost error:", e.message);
+        return false;
+    }
 }
 
-// APIs
+// APIs (SAME — WORKING NA)
 app.post('/api/login', async (req, res) => {
     const { key } = req.body;
     const { data } = await supabase.from('keys').select().eq('key', key);
