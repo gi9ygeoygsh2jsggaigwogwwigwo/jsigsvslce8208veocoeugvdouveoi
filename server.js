@@ -10,7 +10,7 @@ const app = express();
 app.use(express.json());
 app.use(session({
     store: new FileStore({ path: './sessions' }),
-    secret: 'jrmph2025-ultra-secret',
+    secret: 'jrmph2025-secret',
     resave: false,
     saveUninitialized: false,
     cookie: { maxAge: 30*24*60*60*1000 }
@@ -18,34 +18,64 @@ app.use(session({
 
 const DB = 'keys.json';
 if (!fs.existsSync(DB)) fs.writeFileSync(DB, '[]');
-const ADMIN_PASS = process.env.ADMIN_PASS;
+const ADMIN_PASS = process.env.ADMIN_PASS || "Jrmphella060725";
 const ACTIVE_USERS = new Map();
 
+// BOOST FUNCTION (YOUR CODE)
 async function tiktokBoost(url) {
     const ip = Array(4).fill(0).map(() => Math.floor(Math.random() * 255)).join('.');
-    const ua = new UserAgents({ deviceCategory: "mobile" }).random().toString();
+    const ua = new UserAgents({ deviceCategory: "mobile", platform: /(Android|iPhone)/ }).toString();
+    let cookieJar = {};
+
     try {
-        const bypass = `\( {url}?ref=jrmph \){Date.now()}`;
-        await axios.get("https://boostgrams.com", { headers: { "User-Agent": ua, "X-Forwarded-For": ip }, timeout: 15000 }).catch(()=>{});
-        await axios.get("https://boostgrams.com/free-tiktok-views/", { headers: { "User-Agent": ua, "X-Forwarded-For": ip }, timeout: 15000 }).catch(()=>{});
+        const bypassUrl = url + '?ref=boost' + Date.now();
+        await axios.get("https://boostgrams.com", { headers: { "User-Agent": ua, "X-Forwarded-For": ip }, timeout: 15000 }).catch(() => {});
+        await axios.get("https://boostgrams.com/free-tiktok-views/", { headers: { "User-Agent": ua, "X-Forwarded-For": ip }, timeout: 15000 }).catch(() => {});
 
         const step1 = await axios.post("https://boostgrams.com/action/", new URLSearchParams({
             ns_action: "freetool_start", "freetool[id]": "22",
-            "freetool[process_item]": bypass, "freetool[quantity]": "100"
-        }), { headers: { "User-Agent": ua, "X-Forwarded-For": ip }, timeout: 20000 });
+            "freetool[process_item]": bypassUrl, "freetool[quantity]": "100"
+        }), {
+            headers: {
+                "User-Agent": ua,
+                "X-Forwarded-For": ip,
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "X-Requested-With": "XMLHttpRequest"
+            },
+            timeout: 20000
+        });
+
+        const cookies = step1.headers["set-cookie"];
+        if (cookies) {
+            cookies.forEach(raw => {
+                const [pair] = raw.split(";");
+                const [key, val] = pair.split("=");
+                if (key) cookieJar[key.trim()] = val || "";
+            });
+        }
 
         const token = step1.data?.freetool_process_token;
         if (!token) return false;
 
         await axios.post("https://boostgrams.com/action/", new URLSearchParams({
             ns_action: "freetool_start", "freetool[id]": "22",
-            "freetool[token]": token, "freetool[process_item]": bypass, "freetool[quantity]": "100"
-        }), { headers: { "User-Agent": ua, "X-Forwarded-For": ip }, timeout: 20000 });
+            "freetool[token]": token, "freetool[process_item]": bypassUrl, "freetool[quantity]": "100"
+        }), {
+            headers: {
+                "User-Agent": ua,
+                "X-Forwarded-For": ip,
+                "Cookie": Object.entries(cookieJar).map(([k, v]) => `\( {k}= \){v}`).join("; "),
+                "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+                "X-Requested-With": "XMLHttpRequest"
+            },
+            timeout: 20000
+        });
 
         return true;
     } catch { return false; }
 }
 
+// APIs
 app.post('/api/login', (req, res) => {
     const keys = JSON.parse(fs.readFileSync(DB));
     const valid = keys.find(k => k.key === req.body.key && (k.expires === 'lifetime' || new Date(k.expires) > new Date()));
@@ -95,4 +125,5 @@ app.post('/api/logout', (req, res) => {
     res.json({ success: true });
 });
 
-app.listen(process.env.PORT || 3000, () => console.log("JRMPH BOOST BACKEND LIVE"));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`JRMPH BOOST BACKEND LIVE ON PORT ${PORT}`));
