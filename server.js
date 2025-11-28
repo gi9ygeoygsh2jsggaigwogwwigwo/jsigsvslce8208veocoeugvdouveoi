@@ -10,27 +10,27 @@ const path = require('path');
 
 const app = express();
 
-// FIXED CORS + PROXY
+// CORS + PROXY (Vercel + Render combo)
 app.use(cors({ origin: true, credentials: true }));
 app.set('trust proxy', 1);
 
 app.use(express.json());
 
-// SESSION STORAGE (Render-safe)
+// SESSION (Render-safe + FileStore)
 app.use(session({
     store: new FileStore({ path: path.join(__dirname, 'sessions') }),
-    secret: 'jrmph2025-ultra-secret',
+    secret: 'jrmph2025-ultra-secret-key',
     resave: false,
     saveUninitialized: false,
     cookie: {
         secure: true,
         httpOnly: true,
         sameSite: 'none',
-        maxAge: 30 * 24 * 60 * 60 * 1000
+        maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
     }
 }));
 
-// SUPABASE (direct, no .env needed)
+// SUPABASE
 const supabase = createClient(
     'https://eicbwqhajvkrnotiemjj.supabase.co',
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpY2J3cWhhanZrcm5vdGllbWpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQzMzc3NTAsImV4cCI6MjA3OTkxMzc1MH0.no58Sn8uFzgCJRYLRRBzxq6g3UGl6JWxjX1iEUcBje4'
@@ -38,8 +38,20 @@ const supabase = createClient(
 
 const ADMIN_PASS = "Jrmphella060725";
 const ACTIVE_USERS = new Map();
+const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes inactivity
 
-// BOOST ENGINE — WORKING 100%
+// Auto cleanup inactive sessions
+setInterval(() => {
+    const now = Date.now();
+    for (const [id, user] of ACTIVE_USERS.entries()) {
+        if (now - user.last_active > SESSION_TIMEOUT) {
+            console.log(`Timeout: Removed ${user.key}`);
+            ACTIVE_USERS.delete(id);
+        }
+    }
+}, 2 * 60 * 1000);
+
+// BOOST ENGINE (boostgrams.com — WORKING NOV 29, 2025)
 const BASE_URL = "https://boostgrams.com";
 const API_URL = `${BASE_URL}/action/`;
 
@@ -50,8 +62,7 @@ let cookieJar = {};
 const cookiesToHeader = () => Object.entries(cookieJar).map(([k, v]) => `${k}=${v}`).join("; ");
 
 const mergeCookies = (res) => {
-    const cookies = res.headers["set-cookie"];
-    if (!cookies) return;
+    const cookies = res.headers["set-cookie"] || [];
     cookies.forEach(raw => {
         const [pair] = raw.split(";");
         const [key, val] = pair.split("=");
@@ -65,11 +76,8 @@ const getHeaders = (isPage, ip, ua) => ({
     "X-Forwarded-For": ip,
     "X-Real-IP": ip,
     Cookie: cookiesToHeader(),
-    Accept: isPage ? "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" : "*/*",
-    ...(isPage ? {} : {
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "X-Requested-With": "XMLHttpRequest"
-    })
+    Accept: isPage ? "text/html,*/*" : "*/*",
+    ...(isPage ? {} : { "Content-Type": "application/x-www-form-urlencoded", "X-Requested-With": "XMLHttpRequest" })
 });
 
 const buildBody = (url, token = "") => {
@@ -88,30 +96,22 @@ const initSession = async (ip, ua) => {
     await axios.get(`${BASE_URL}/free-tiktok-views/`, { headers: getHeaders(true, ip, ua), timeout: 15000 }).catch(() => {});
 };
 
-const generateBypassUrl = (url) => {
-    const rand = Math.random().toString(36).substring(2);
-    const time = Date.now();
-    return `${url}?ref=jrmph${rand}${time}&t=${time}`;
-};
+const generateBypassUrl = (url) => `${url}?ref=jrmph${Date.now()}${Math.random().toString(36).substr(2,5)}`;
 
-const cleanUrl = (url) => {
-    try { const u = new URL(url); return `${u.origin}${u.pathname}`; }
-    catch { return url; }
-};
+const cleanUrl = (url) => { try { const u = new URL(url); return `${u.origin}${u.pathname}`; } catch { return url; } };
 
 const resolveShortUrl = (shortUrl) => new Promise((resolve, reject) => {
-    https.request(shortUrl, { method: "HEAD", headers: { "User-Agent": randomUA() } }, (res) => {
+    https.request(shortUrl, { method: "HEAD", headers: { "User-Agent": randomUA() } }, res => {
         const loc = res.headers.location;
-        if (!loc) return reject();
-        if (loc.includes("/video/")) resolve(loc);
-        else resolveShortUrl(loc).then(resolve).catch(reject);
+        if (loc && loc.includes("/video/")) resolve(loc);
+        else if (loc) resolveShortUrl(loc).then(resolve).catch(reject);
+        else reject();
     }).on("error", reject).end();
 });
 
 const prepareUrl = async (input) => {
     if (input.includes("vt.tiktok.com") || input.includes("vm.tiktok.com")) {
-        try { return cleanUrl(await resolveShortUrl(input)); }
-        catch { return cleanUrl(input); }
+        try { return cleanUrl(await resolveShortUrl(input)); } catch { return cleanUrl(input); }
     }
     return cleanUrl(input);
 };
@@ -141,22 +141,29 @@ const tiktokBoost = async (rawUrl) => {
             timeout: 20000
         });
 
-        return !!(step2.data?.statu || step2.data?.success || step2.data?.status);
-    } catch {
-        return false;
-    }
+        return !!(step2.data?.status || step2.data?.success);
+    } catch { return false; }
 };
 
 // APIs
 app.post('/api/login', async (req, res) => {
     const { key } = req.body;
+    if (!key) return res.json({ success: false });
+
     const { data } = await supabase.from('keys').select().eq('key', key).single();
     const valid = data && (data.expires === 'lifetime' || new Date(data.expires) > new Date());
 
     if (valid) {
         req.session.loggedIn = true;
         req.session.key = key;
-        ACTIVE_USERS.set(req.sessionID, { key, sent: 0 });
+
+        ACTIVE_USERS.set(req.sessionID, {
+            key,
+            current_url: "Not set",
+            sent: 0,
+            last_active: Date.now()
+        });
+
         res.json({ success: true });
     } else {
         res.json({ success: false });
@@ -168,38 +175,50 @@ app.post('/api/boost', async (req, res) => {
     const user = ACTIVE_USERS.get(req.sessionID);
     if (!user) return res.json({ success: false });
 
+    user.current_url = req.body.url;
+    user.last_active = Date.now();
+
     const ok = await tiktokBoost(req.body.url);
     if (ok) user.sent += 100;
+
     res.json({ success: ok, total: user.sent });
 });
 
 app.get('/api/sessions', (req, res) => {
-    res.json({ count: ACTIVE_USERS.size });
+    const now = Date.now();
+    const users = Array.from(ACTIVE_USERS.entries()).map(([id, u]) => ({
+        key: u.key,
+        url: u.current_url,
+        sent: u.sent,
+        idle: Math.floor((now - u.last_active) / 1000) + "s ago"
+    }));
+
+    res.json({ count: ACTIVE_USERS.size, users });
+});
+
+app.post('/api/ping', (req, res) => {
+    if (req.session.loggedIn && ACTIVE_USERS.has(req.sessionID)) {
+        ACTIVE_USERS.get(req.sessionID).last_active = Date.now();
+        res.json({ success: true });
+    } else res.json({ success: false });
 });
 
 app.post('/api/admin', async (req, res) => {
     if (req.body.pass !== ADMIN_PASS) return res.status(403).json({ error: "no" });
     const { action, key, expires } = req.body;
 
-    if (action === "add") {
-        await supabase.from('keys').insert({ key, expires: expires || "lifetime" });
-        res.json({ success: true });
-    }
-    if (action === "delete") {
-        await supabase.from('keys').delete().eq('key', key);
-        res.json({ success: true });
-    }
-    if (action === "list") {
-        const { data } = await supabase.from('keys').select();
-        res.json({ keys: data || [] });
-    }
+    if (action === "add") await supabase.from('keys').insert({ key, expires: expires || "lifetime" });
+    if (action === "delete") await supabase.from('keys').delete().eq('key', key);
+    if (action === "list") { const { data } = await supabase.from('keys').select(); res.json({ keys: data || [] }); }
+
+    res.json({ success: true });
 });
 
 app.get('/', (req, res) => {
-    res.send("<h1>JRMPH BOOST 2025 — LIVE & WORKING 100%</h1><p>Made by Jrmph • Nov 29, 2025</p>");
+    res.send("<h1>JRMPH BOOST 2025 — LIVE & UNTOUCHABLE</h1><p>Made with love by Jrmph • Nov 29, 2025</p>");
 });
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-    console.log(`JRMPH BOOST BACKEND LIVE → https://tiktokboostingviewslikes.onrender.com`);
+    console.log(`JRMPH BOOST 2025 RUNNING → https://tiktokboostingviewslikes.onrender.com`);
 });
