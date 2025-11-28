@@ -1,7 +1,9 @@
 {
   "name": "jrmph-boost",
   "version": "1.0.0",
+  "description": "TikTok Boost Premium by Jrmph",
   "main": "server.js",
+  "type": "commonjs",
   "scripts": {
     "start": "node server.js"
   },
@@ -11,6 +13,10 @@
     "session-file-store": "^1.5.0",
     "axios": "^1.6.0",
     "user-agents": "^1.0.1400",
-    "@supabase/supabase-js": "^2.39.7"
+    "@supabase/supabase-js": "^2.39.7",
+    "cors": "^2.8.5"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 }
