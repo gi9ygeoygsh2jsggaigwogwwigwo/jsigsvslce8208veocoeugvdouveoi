@@ -1,4 +1,3 @@
-require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
 const FileStore = require('session-file-store')(session);
@@ -10,22 +9,22 @@ const app = express();
 app.use(express.json());
 app.use(session({
     store: new FileStore({ path: './sessions' }),
-    secret: 'jrmph2025-ultra-secret',
+    secret: 'jrmph2025-secret',
     resave: false,
     saveUninitialized: false,
     cookie: { maxAge: 30*24*60*60*1000 }
 }));
 
-// SUPABASE — FROM .env ONLY
+// SUPABASE — HARD CODED (SAFE KASI RENDER ONLY)
 const supabase = createClient(
-    process.env.SUPABASE_URL,
-    process.env.SUPABASE_KEY
+    'https://eicbwqhajvkrnotiemjj.supabase.co',
+    'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpY2J3cWhhanZrcm5vdGllbWpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQzMzc3NTAsImV4cCI6MjA3OTkxMzc1MH0.no58Sn8uFzgCJRYLRRBzxq6g3UGl6JWxjX1iEUcBje4'
 );
 
-const ADMIN_PASS = process.env.ADMIN_PASS;
+const ADMIN_PASS = "Jrmphella060725";
 const ACTIVE_USERS = new Map();
 
-// BOOST FUNCTION (SAME AS YOUR ORIGINAL)
+// BOOST FUNCTION (YOUR ORIGINAL — WORKING)
 async function tiktokBoost(url) {
     const ip = Array(4).fill(0).map(()=>Math.floor(Math.random()*255)).join('.');
     const ua = new UserAgents({ deviceCategory: "mobile" }).random().toString();
@@ -51,7 +50,7 @@ async function tiktokBoost(url) {
     } catch { return false; }
 }
 
-// APIs (SAME LOGIC)
+// APIs
 app.post('/api/login', async (req, res) => {
     const { key } = req.body;
     const { data } = await supabase.from('keys').select().eq('key', key);
@@ -85,7 +84,7 @@ app.get('/api/sessions', (req, res) => {
 });
 
 app.post('/api/admin', async (req, res) => {
-    if (req.body.pass !== ADMIN_PASS) return res.status(403).json({ error: "Forbidden" });
+    if (req.body.pass !== ADMIN_PASS) return res.status(403).json({ error: "no" });
     const { action, key, expires } = req.body;
 
     if (action === "add") {
@@ -107,4 +106,4 @@ app.post('/api/logout', (req, res) => {
     res.json({ success: true });
 });
 
-app.listen(process.env.PORT || 3000);
+app.listen(process.env.PORT || 3000, () => console.log("JRMPH BOOST BACKEND LIVE"));
