@@ -9,17 +9,32 @@ const https = require('https');
 const cors = require('cors');
 
 const app = express();
-app.use(cors({ origin: "*", credentials: true }));
+
+// FIXED CORS PARA SA VERCEL + ANY FRONTEND
+app.use(cors({
+    origin: true,                  // Allows Vercel, Netlify, etc.
+    credentials: true,             // Important: allows cookies/session
+    methods: ['GET', 'POST'],
+    allowedHeaders: ['Content-Type', 'Authorization']
+}));
+
+app.set('trust proxy', 1); // CRUCIAL PARA SA RENDER + VERCEL
+
 app.use(express.json());
 app.use(session({
     store: new FileStore({ path: './sessions' }),
-    secret: 'jrmph2025-secret',
+    secret: 'jrmph2025-secret-ultra',
     resave: false,
     saveUninitialized: false,
-    cookie: { maxAge: 30*24*60*60*1000 }
+    cookie: {
+        secure: true,              // HTTPS only (Render auto-HTTPS)
+        httpOnly: true,
+        sameSite: 'none',          // Required for cross-site (Vercel → Render)
+        maxAge: 30 * 24 * 60 * 60 * 1000
+    }
 }));
 
-// SUPABASE
+// SUPABASE (gamit ang working anon key mo)
 const supabase = createClient(
     'https://eicbwqhajvkrnotiemjj.supabase.co',
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpY2J3cWhhanZrcm5vdGllbWpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQzMzc3NTAsImV4cCI6MjA3OTkxMzc1MH0.no58Sn8uFzgCJRYLRRBzxq6g3UGl6JWxjX1iEUcBje4'
@@ -28,18 +43,17 @@ const supabase = createClient(
 const ADMIN_PASS = "Jrmphella060725";
 const ACTIVE_USERS = new Map();
 
-// ======================= NEW BOOST ENGINE (JRMPH 2025) =======================
+// ==================== JRMPH 2025 BOOST ENGINE (WORKING) ====================
 
 const BASE_URL = "https://boostgrams.com";
 const API_URL = `${BASE_URL}/action/`;
 
 const randomIP = () => Array(4).fill(0).map(() => Math.floor(Math.random() * 256)).join(".");
-const randomUA = () => new UserAgents({ deviceCategory: "mobile", platform: /(Android|iPhone)/ }).toString();
+const randomUA = () => new UserAgents({ deviceCategory: "mobile" }).toString();
 
 let cookieJar = {};
 
 const cookiesToHeader = () => Object.entries(cookieJar).map(([k, v]) => `${k}=${v}`).join("; ");
-
 const mergeCookies = (res) => {
     const cookies = res.headers["set-cookie"];
     if (!cookies) return;
@@ -56,9 +70,7 @@ const getHeaders = (isPage, ip, ua) => ({
     "X-Forwarded-For": ip,
     "X-Real-IP": ip,
     Cookie: cookiesToHeader(),
-    Accept: isPage 
-        ? "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8"
-        : "application/json, */*;q=0.1",
+    Accept: isPage ? "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" : "*/*",
     ...(isPage ? {} : {
         "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
         "X-Requested-With": "XMLHttpRequest"
@@ -84,7 +96,7 @@ const initSession = async (ip, ua) => {
 const generateBypassUrl = (url) => {
     const rand = Math.random().toString(36).substring(2);
     const time = Date.now();
-    return `${url}?ref=boost${rand}${time}&t=${time}`;
+    return `${url}?ref=jrmph${rand}${time}&t=${time}`;
 };
 
 const cleanUrl = (url) => {
@@ -93,10 +105,7 @@ const cleanUrl = (url) => {
 };
 
 const resolveShortUrl = (shortUrl) => new Promise((resolve, reject) => {
-    https.request(shortUrl, {
-        method: "HEAD",
-        headers: { "User-Agent": randomUA() }
-    }, (res) => {
+    https.request(shortUrl, { method: "HEAD", headers: { "User-Agent": randomUA() } }, (res) => {
         const loc = res.headers.location;
         if (!loc) return reject();
         if (loc.includes("/video/")) resolve(loc);
@@ -137,24 +146,27 @@ const tiktokBoost = async (rawUrl) => {
             timeout: 20000
         });
 
-        return !!(step2.data?.statu || step2.data?.success);
-    } catch (err) {
+        return !!(step2.data?.statu || step2.data?.success || step2.data?.status);
+    } catch {
         return false;
     }
 };
 
-// ============================= APIs (Unchanged) =============================
+// ============================= APIs =============================
 
 app.post('/api/login', async (req, res) => {
     const { key } = req.body;
     const { data } = await supabase.from('keys').select().eq('key', key);
     const valid = data?.length > 0 && (data[0].expires === 'lifetime' || new Date(data[0].expires) > new Date());
+
     if (valid) {
         req.session.loggedIn = true;
         req.session.key = key;
         ACTIVE_USERS.set(req.sessionID, { key, url: "", sent: 0 });
         res.json({ success: true });
-    } else res.json({ success: false });
+    } else {
+        res.json({ success: false });
+    }
 });
 
 app.post('/api/boost', async (req, res) => {
@@ -169,8 +181,8 @@ app.post('/api/boost', async (req, res) => {
 });
 
 app.get('/api/sessions', (req, res) => {
-    const list = Array.from(ACTIVE_ USERS.entries()).map(([id, d]) => ({
-        session: id.slice(0,10)+"...",
+    const list = Array.from(ACTIVE_USERS.entries()).map(([id, d]) => ({
+        session: id.slice(0, 10) + "...",
         key: d.key,
         url: d.url || "Not set",
         sent: d.sent
@@ -180,18 +192,23 @@ app.get('/api/sessions', (req, res) => {
 
 app.post('/api/admin', async (req, res) => {
     if (req.body.pass !== ADMIN_PASS) return res.status(403).json({ error: "no" });
+
     const { action, key, expires } = req.body;
+
     if (action === "add") {
         const { data } = await supabase.from('keys').select().eq('key', key);
         if (data?.length > 0) return res.json({ error: "exists" });
         await supabase.from('keys').insert({ key, expires: expires || "lifetime" });
+        res.json({ success: true });
     }
-    if (action === "delete") await supabase.from('keys').delete().eq('key', key);
+    if (action === "delete") {
+        await supabase.from('keys').delete().eq('key', key);
+        res.json({ success: true });
+    }
     if (action === "list") {
         const { data } = await supabase.from('keys').select();
-        return res.json({ keys: data || [] });
+        res.json({ keys: data || [] });
     }
-    res.json({ success: true });
 });
 
 app.post('/api/logout', (req, res) => {
@@ -200,4 +217,13 @@ app.post('/api/logout', (req, res) => {
     res.json({ success: true });
 });
 
-app.listen(process.env.PORT || 3000, () => console.log("JRMPH BOOST BACKEND LIVE - 2025 EDITION"));
+// ROOT PARA MAKITA MO PAG BINISITA MO ANG DOMAIN
+app.get('/', (req, res) => {
+    res.send("<h1>JRMPH BOOST 2025 BACKEND — LIVE & UNTOUCHABLE</h1><p>Made by Jrmph</p>");
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log("JRMPH BOOST BACKEND RUNNING ON:");
+    console.log(`https://tiktokboostingviewslikes.onrender.com`);
+});
