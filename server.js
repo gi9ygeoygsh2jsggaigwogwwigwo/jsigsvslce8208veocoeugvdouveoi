@@ -18,13 +18,11 @@ app.use(session({
 
 const DB = 'keys.json';
 if (!fs.existsSync(DB)) fs.writeFileSync(DB, '[]');
-const ADMIN_PASS = process.env.ADMIN_PASS || "fallback123"; // ← FROM .env
-
+const ADMIN_PASS = process.env.ADMIN_PASS;
 const ACTIVE_USERS = new Map();
 
-// BOOST FUNCTION (same as before)
 async function tiktokBoost(url) {
-    const ip = Array(4).fill(0).map(()=>Math.floor(Math.random()*255)).join('.');
+    const ip = Array(4).fill(0).map(() => Math.floor(Math.random() * 255)).join('.');
     const ua = new UserAgents({ deviceCategory: "mobile" }).random().toString();
     try {
         const bypass = `\( {url}?ref=jrmph \){Date.now()}`;
@@ -48,14 +46,13 @@ async function tiktokBoost(url) {
     } catch { return false; }
 }
 
-// APIs (same as before)
 app.post('/api/login', (req, res) => {
     const keys = JSON.parse(fs.readFileSync(DB));
     const valid = keys.find(k => k.key === req.body.key && (k.expires === 'lifetime' || new Date(k.expires) > new Date()));
     if (valid) {
         req.session.loggedIn = true;
         req.session.key = req.body.key;
-        ACTIVE_USERS.set(req.sessionID, { key: req.body.key, url: "", sent: 0 });
+        ACTIVE_USERS.set(req.sessionID, { key: req.body.key, url: "", sent: 0, lastSeen: Date.now() });
         res.json({ success: true });
     } else res.json({ success: false });
 });
@@ -65,17 +62,18 @@ app.post('/api/boost', async (req, res) => {
     const user = ACTIVE_USERS.get(req.sessionID);
     if (!user) return res.json({ success: false });
     user.url = req.body.url;
+    user.lastSeen = Date.now();
     const ok = await tiktokBoost(req.body.url);
     if (ok) user.sent += 100;
     res.json({ success: ok, total: user.sent });
 });
 
 app.get('/api/sessions', (req, res) => {
-    const list = Array.from(ACTIVE_USERS.entries()).map(([id, data]) => ({
+    const list = Array.from(ACTIVE_USERS.entries()).map(([id, d]) => ({
         session: id.slice(0,10)+"...",
-        key: data.key,
-        url: data.url || "Not set",
-        sent: data.sent
+        key: d.key,
+        url: d.url || "Not set",
+        sent: d.sent
     }));
     res.json({ count: ACTIVE_USERS.size, users: list });
 });
