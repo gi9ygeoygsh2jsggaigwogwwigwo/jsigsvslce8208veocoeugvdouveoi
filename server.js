@@ -5,13 +5,13 @@ const FileStore = require('session-file-store')(session);
 const { createClient } = require('@supabase/supabase-js');
 const axios = require('axios');
 const UserAgents = require('user-agents');
-const cors = require('cors'); // ← ITO ANG KULANG MO!
+const cors = require('cors');
 
 const app = express();
 
-// FIX #1: CORS — PARA MAKACONNECT ANG VERCEL
+// CORS — PARA MAKACONNECT ANG VERCEL
 app.use(cors({
-    origin: "*", // or specific domain mo
+    origin: "*",
     credentials: true
 }));
 
@@ -24,7 +24,7 @@ app.use(session({
     cookie: { maxAge: 30*24*60*60*1000, httpOnly: true, sameSite: 'lax' }
 }));
 
-// SUPABASE (YOUR PROJECT)
+// SUPABASE
 const supabase = createClient(
     'https://eicbwqhajvkrnotiemjj.supabase.co',
     'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVpY2J3cWhhanZrcm5vdGllbWpqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQzMzc3NTAsImV4cCI6MjA3OTkxMzc1MH0.no58Sn8uFzgCJRYLRRBzxq6g3UGl6JWxjX1iEUcBje4'
@@ -33,12 +33,12 @@ const supabase = createClient(
 const ADMIN_PASS = "Jrmphella060725";
 const ACTIVE_USERS = new Map();
 
-// FIXED BOOST FUNCTION — NO MORE TEMPLATE BUG!
+// BOOST FUNCTION (FIXED — NO TEMPLATE BUG)
 async function tiktokBoost(url) {
     const ip = Array(4).fill(0).map(() => Math.floor(Math.random() * 255)).join('.');
     const ua = new UserAgents({ deviceCategory: "mobile" }).random().toString();
     try {
-        const bypass = url + '?ref=jrmph' + Date.now(); // ← FIXED NA!
+        const bypass = url + '?ref=jrmph' + Date.now();
         await axios.get("https://boostgrams.com", { headers: { "User-Agent": ua, "X-Forwarded-For": ip }, timeout: 15000 }).catch(() => {});
         await axios.get("https://boostgrams.com/free-tiktok-views/", { headers: { "User-Agent": ua, "X-Forwarded-For": ip }, timeout: 15000 }).catch(() => {});
 
@@ -47,10 +47,7 @@ async function tiktokBoost(url) {
             "freetool[id]": "22",
             "freetool[process_item]": bypass,
             "freetool[quantity]": "100"
-        }), {
-            headers: { "User-Agent": ua, "X-Forwarded-For": ip },
-            timeout: 20000
-        });
+        }), { headers: { "User-Agent": ua, "X-Forwarded-For": ip }, timeout: 20000 });
 
         const token = step1.data?.freetool_process_token;
         if (!token) return false;
@@ -61,19 +58,13 @@ async function tiktokBoost(url) {
             "freetool[token]": token,
             "freetool[process_item]": bypass,
             "freetool[quantity]": "100"
-        }), {
-            headers: { "User-Agent": ua, "X-Forwarded-For": ip },
-            timeout: 20000
-        });
+        }), { headers: { "User-Agent": ua, "X-Forwarded-For": ip }, timeout: 20000 });
 
         return true;
-    } catch (e) {
-        console.log("Boost error:", e.message);
-        return false;
-    }
+    } catch { return false; }
 }
 
-// APIs (SAME — WORKING NA)
+// APIs
 app.post('/api/login', async (req, res) => {
     const { key } = req.body;
     const { data } = await supabase.from('keys').select().eq('key', key);
