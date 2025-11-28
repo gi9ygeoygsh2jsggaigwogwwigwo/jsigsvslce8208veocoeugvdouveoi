@@ -1,4 +1,4 @@
-// server.js — RENDER ONLY (HINDI MAKIKITA SA VERCEL)
+require('dotenv').config();
 const express = require('express');
 const session = require('express-session');
 const FileStore = require('session-file-store')(session);
@@ -10,7 +10,7 @@ const app = express();
 app.use(express.json());
 app.use(session({
     store: new FileStore({ path: './sessions' }),
-    secret: 'jrmph-secret-2025',
+    secret: 'jrmph2025-ultra-secret',
     resave: false,
     saveUninitialized: false,
     cookie: { maxAge: 30*24*60*60*1000 }
@@ -18,11 +18,11 @@ app.use(session({
 
 const DB = 'keys.json';
 if (!fs.existsSync(DB)) fs.writeFileSync(DB, '[]');
-const ADMIN_PASS = "Jrmphella060725";
+const ADMIN_PASS = process.env.ADMIN_PASS || "fallback123"; // ← FROM .env
 
-const ACTIVE_USERS = new Map(); // Live sessions
+const ACTIVE_USERS = new Map();
 
-// BOOST FUNCTION (100% SERVER-SIDE)
+// BOOST FUNCTION (same as before)
 async function tiktokBoost(url) {
     const ip = Array(4).fill(0).map(()=>Math.floor(Math.random()*255)).join('.');
     const ua = new UserAgents({ deviceCategory: "mobile" }).random().toString();
@@ -48,47 +48,40 @@ async function tiktokBoost(url) {
     } catch { return false; }
 }
 
-// LOGIN + SESSION
+// APIs (same as before)
 app.post('/api/login', (req, res) => {
     const keys = JSON.parse(fs.readFileSync(DB));
     const valid = keys.find(k => k.key === req.body.key && (k.expires === 'lifetime' || new Date(k.expires) > new Date()));
     if (valid) {
         req.session.loggedIn = true;
         req.session.key = req.body.key;
-        req.session.expires = valid.expires;
-        ACTIVE_USERS.set(req.sessionID, { key: req.body.key, url: "", sent: 0, lastSeen: Date.now() });
-        return res.json({ success: true });
-    }
-    res.json({ success: false });
+        ACTIVE_USERS.set(req.sessionID, { key: req.body.key, url: "", sent: 0 });
+        res.json({ success: true });
+    } else res.json({ success: false });
 });
 
-// BOOST API
 app.post('/api/boost', async (req, res) => {
     if (!req.session.loggedIn) return res.json({ success: false });
     const user = ACTIVE_USERS.get(req.sessionID);
     if (!user) return res.json({ success: false });
     user.url = req.body.url;
-    user.lastSeen = Date.now();
     const ok = await tiktokBoost(req.body.url);
     if (ok) user.sent += 100;
     res.json({ success: ok, total: user.sent });
 });
 
-// GET ACTIVE SESSIONS (ADMIN ONLY)
 app.get('/api/sessions', (req, res) => {
     const list = Array.from(ACTIVE_USERS.entries()).map(([id, data]) => ({
         session: id.slice(0,10)+"...",
         key: data.key,
         url: data.url || "Not set",
-        sent: data.sent,
-        lastSeen: new Date(data.lastSeen
+        sent: data.sent
     }));
     res.json({ count: ACTIVE_USERS.size, users: list });
 });
 
-// ADMIN (TERMUX)
 app.post('/api/admin', (req, res) => {
-    if (req.body.pass !== ADMIN_PASS) return res.status(403).json({ error: "no" });
+    if (req.body.pass !== ADMIN_PASS) return res.status(403).json({ error: "Forbidden" });
     let keys = JSON.parse(fs.readFileSync(DB));
     const { action, key, expires } = req.body;
     if (action === "add") keys.push({ key, expires: expires || "lifetime" });
@@ -98,11 +91,10 @@ app.post('/api/admin', (req, res) => {
     res.json({ success: true });
 });
 
-// LOGOUT
 app.post('/api/logout', (req, res) => {
     ACTIVE_USERS.delete(req.sessionID);
     req.session.destroy();
     res.json({ success: true });
 });
 
-app.listen(process.env.PORT || 3000);
+app.listen(process.env.PORT || 3000, () => console.log("JRMPH BOOST BACKEND LIVE"));
